@@ -1,4 +1,4 @@
-import socket, sys, commands 
+import socket, sys, commands, re
 
 #controller default PORT and IP
 UDP_IP = 'controller'
@@ -15,6 +15,11 @@ message = "Hello"# + ";" + hostname + ";" + mac_address
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) # UDP
 sock.bind(('', UDP_INP_PORT))
 sock.sendto(message, (UDP_IP, UDP_PORT))
-while True:
-    data, addr = sock.recvfrom(1024) # buffer size is 1024 bytes
-    print "received message:", data
+
+data, addr = sock.recvfrom(1024) # buffer size is 1024 bytes
+print "received message:", data
+split_line = re.split(';',data)
+parameters = tuple(re.split(',',split_line[0]))
+timeout = int(split_line[1])
+print "Timeout", timeout
+print "Parameters", parameters
