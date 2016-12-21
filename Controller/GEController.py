@@ -148,7 +148,7 @@ class SimpleSwitch(app_manager.RyuApp):
 
         udp_segment = pkt.get_protocol(udp.udp)
 
-        if udp_segment:
+        if udp_segment and ipv4_pkt.dst == CONTROLLER_IP:
            self.logger.info("udp %s", udp_segment)
            print "Got UDP packet"	
            udp_pointer = len(msg.data) - udp_segment.total_length + 8 
@@ -168,6 +168,10 @@ class SimpleSwitch(app_manager.RyuApp):
                 conf_src = "DEFAULT"
 	     message = ','.join(p[0] for p in self.configuration[conf_src][0]) + ";" + self.configuration[conf_src][1]
 	     self.send_udp_reply(dpid, datapath, eth, ipv4_pkt, udp_segment, in_port, message)
+	  
+           elif udp_segment.dst_port == 7778:
+	     print message           
+          
 
     def send_udp_reply(self, dpid, datapath, eth, ipv4_pkt, udp_segment, out_port, message): 
 	ofproto = datapath.ofproto
