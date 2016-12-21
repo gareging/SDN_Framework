@@ -43,7 +43,7 @@ from ryu.lib.packet import packet_base
 from netaddr import *
 from utils import *
 from ryu.lib.mac import haddr_to_bin
-from PropFair import *
+#from PropFair import *
 
 '''
 This file is edited from Ryu example which is located at  ryu/ryu/app/simple_switch.py.
@@ -76,10 +76,17 @@ class SimpleSwitch(app_manager.RyuApp):
 	       continue
 	     split_line = re.split(';',line[:-1])
              server = split_line[0]
-             parameters = split_line[1]
+             parameters_weights = re.split(',',split_line[1])
+             parameter_list = []
+             for pw in parameters_weights:
+               parameter = re.split('\*',pw)
+               if len(parameter)==1:
+                  #in case if we don't specify the weight
+                  parameter.append(100/len(parameters_weights))
+               parameter_list.append(tuple(parameter))
 	     timeout = split_line[2]
 	     self.configuration.setdefault(server, {})
-             self.configuration[server] = [re.split(',',parameters), timeout]
+             self.configuration[server] = (parameter_list, timeout)
 	print self.configuration
 
         if "DEFAULT" not in self.configuration:
@@ -153,12 +160,14 @@ class SimpleSwitch(app_manager.RyuApp):
                print "Add new server"
 	       n = self.number_of_servers[dpid] = self.number_of_servers[dpid] + 1
                self.servers[dpid][n] = ipv4_pkt.src
-               if ipv4_pkt.src in self.configuration:
-                  conf_src = ipv4_pkt.src
-               else:
-                  conf_src = "DEFAULT"
-	       message = ','.join(self.configuration[conf_src][0]) + ";" + self.configuration[conf_src][1]
-	       self.send_udp_reply(dpid, datapath, eth, ipv4_pkt, udp_segment, in_port, message)
+             
+             #send UDP reply with the list of parameters and timeout
+	     if ipv4_pkt.src in self.configuration:
+                conf_src = ipv4_pkt.src
+             else:
+                conf_src = "DEFAULT"
+	     message = ','.join(p[0] for p in self.configuration[conf_src][0]) + ";" + self.configuration[conf_src][1]
+	     self.send_udp_reply(dpid, datapath, eth, ipv4_pkt, udp_segment, in_port, message)
 
     def send_udp_reply(self, dpid, datapath, eth, ipv4_pkt, udp_segment, out_port, message): 
 	ofproto = datapath.ofproto
