@@ -1,4 +1,4 @@
 # Format: DEFAULT / <ip_address> | Possible values: GE (Green energy), CPU, DL (delay) | timeout (sec)
-DEFAULT;GE,CPU,DL;10
-10.5.5.1;GE;100
-10.10.1.4;GE,CPU;60
+DEFAULT;GE*10,CPU*40,DL*50;10
+10.5.5.1;GE,DL,NX,SS,RR,TT;100
+10.10.1.4;GE*30,CPU*70;60
