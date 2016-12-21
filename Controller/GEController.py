@@ -43,7 +43,7 @@ from ryu.lib.packet import packet_base
 from netaddr import *
 from utils import *
 from ryu.lib.mac import haddr_to_bin
-from PropFair import *
+#from PropFair import *
 
 '''
 This file is edited from Ryu example which is located at  ryu/ryu/app/simple_switch.py.
