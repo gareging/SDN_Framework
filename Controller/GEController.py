@@ -63,9 +63,9 @@ class SimpleSwitch(app_manager.RyuApp):
 
     def __init__(self, *args, **kwargs):
         super(SimpleSwitch, self).__init__(*args, **kwargs)
-        self.ip_mac_port = {}   
+        self.ip_mac_port = {}  #collection of all interfaces connected to OVS
 	printComments = 1
-	self.configuration = {}
+	self.configuration = {}  #table for the configuration: DEFAULT/IP_addess;{PARAM*WEIGHT};TIMEOUT
 	self.number_of_servers = {}
 	self.servers = {}
 	#read the configuration file
@@ -156,18 +156,22 @@ class SimpleSwitch(app_manager.RyuApp):
            message = msg.data[udp_pointer:]
            if udp_segment.dst_port == 7777 and message == "Hello":
              print "Server initialization"
-             if ipv4_pkt.src not in self.servers[dpid][(lambda x: x)(self.number_of_servers[dpid])]:
+             if ipv4_pkt.src not in self.servers[dpid][(lambda x: x)(self.number_of_servers[dpid])][0]:
                print "Add new server"
 	       n = self.number_of_servers[dpid] = self.number_of_servers[dpid] + 1
-               self.servers[dpid][n] = ipv4_pkt.src
+               self.servers[dpid][n] = [ipv4_pkt.src,[]]
+
              
              #send UDP reply with the list of parameters and timeout
 	     if ipv4_pkt.src in self.configuration:
                 conf_src = ipv4_pkt.src
              else:
                 conf_src = "DEFAULT"
+             self.servers[dpid][n][1]=[0.0]*len(self.configuration[conf_src][0])
 	     message = ','.join(p[0] for p in self.configuration[conf_src][0]) + ";" + self.configuration[conf_src][1]
 	     self.send_udp_reply(dpid, datapath, eth, ipv4_pkt, udp_segment, in_port, message)
+
+             print self.servers
 	  
            elif udp_segment.dst_port == 7778:
 	     print message           
@@ -252,7 +256,7 @@ class SimpleSwitch(app_manager.RyuApp):
        self.number_of_servers.setdefault(dpid, {})
        self.servers.setdefault(dpid, {})
        self.number_of_servers[dpid]=0
-       self.servers[dpid][0]='0'
+       self.servers[dpid][0]=('0')
        
        #empty the flow table
        flow_mod = self.remove_table_flows(dp, 0,empty_match)
