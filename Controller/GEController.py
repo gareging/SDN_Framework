@@ -104,6 +104,14 @@ class SimpleSwitch(app_manager.RyuApp):
         	i = (i << 8) | b
         return i
 
+    def findIPInServerList(self, l, ip_address):
+        for i in range (0, len(l)):
+	  if (l[i][0]==ip_address):
+            return i
+          else:
+            continue
+ 	return -1
+
     
     def add_flow(self, datapath, match, act, priority=0, idle_timeout=0, flags=0, cookie=0):
         ofproto = datapath.ofproto
@@ -156,25 +164,28 @@ class SimpleSwitch(app_manager.RyuApp):
            message = msg.data[udp_pointer:]
            if udp_segment.dst_port == 7777 and message == "Hello":
              print "Server initialization"
-             if ipv4_pkt.src not in self.servers[dpid][(lambda x: x)(self.number_of_servers[dpid])][0]:
-               print "Add new server"
-	       n = self.number_of_servers[dpid] = self.number_of_servers[dpid] + 1
-               self.servers[dpid][n] = [ipv4_pkt.src,[]]
-
-             
              #send UDP reply with the list of parameters and timeout
-	     if ipv4_pkt.src in self.configuration:
+    	     if ipv4_pkt.src in self.configuration:
                 conf_src = ipv4_pkt.src
              else:
                 conf_src = "DEFAULT"
-             self.servers[dpid][n][1]=[0.0]*len(self.configuration[conf_src][0])
-	     message = ','.join(p[0] for p in self.configuration[conf_src][0]) + ";" + self.configuration[conf_src][1]
+                    
+            # if ipv4_pkt.src not in self.servers[dpid][(lambda x: x)(self.number_of_servers[dpid])][0]:
+            # if ipv4_pkt.src not in self.servers[dpid][(lambda x: x)(self.number_of_servers[dpid])][0]:
+	     n = self.findIPInServerList(self.servers[dpid], ipv4_pkt.src)
+	     if n==-1:
+               print "Add new server"
+               n = self.number_of_servers[dpid] = self.number_of_servers[dpid] + 1
+               self.servers[dpid][n] = [ipv4_pkt.src,[]]
+               self.servers[dpid][n][1]=[0.0]*len(self.configuration[conf_src][0])
+       
+             message = ','.join(p[0] for p in self.configuration[conf_src][0]) + ";" + self.configuration[conf_src][1] + ";" + str(n)
 	     self.send_udp_reply(dpid, datapath, eth, ipv4_pkt, udp_segment, in_port, message)
 
              print self.servers
 	  
            elif udp_segment.dst_port == 7778:
-	     print message           
+             print message           
           
 
     def send_udp_reply(self, dpid, datapath, eth, ipv4_pkt, udp_segment, out_port, message): 
