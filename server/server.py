@@ -1,5 +1,5 @@
 import socket, sys, commands, re
-import random, time
+import random, time, math
 
 #controller default PORT and IP
 UDP_IP = 'controller'
@@ -7,10 +7,21 @@ UDP_PORT_HELLO = 7777
 UDP_PORT_INFO = 7778
 UDP_OUT_PORT=5005
 
+estE = 0.0 
+devE = 0.0
+
 def getGreenEnergyValue():
+  global estE
+  global devE 
   bs=10
-  gE = random.uniform(1,10)*bs
-  return gE, bs*10
+  alpha = 0.125
+  betha = 0.25
+  sampleE = random.uniform(1,10)*bs
+  if (estE == 0):
+    estE = sampleE
+  else:
+    estE = (1 - alpha)*estE + alpha*sampleE
+  return estE, bs*10
 
 def getDelayValue():
   return 10, 10
@@ -33,6 +44,7 @@ def main():
   split_line = re.split(';',data)
   parameters = tuple(re.split(',',split_line[0]))
   timeout = int(split_line[1])
+  id = split_line[2]
   print "Timeout", timeout
   print "Parameters", parameters
 
@@ -47,8 +59,8 @@ def main():
         v, metrics = getDelayValue()
       elif (p == 'CPU'):
         v, metrics = getCPUValue()  
-      message += str(v) + ',' + str(metrics) + ';'
-
+      message += str(v) + ',' #sending only value for now
+    message = message[:-1] + ";" + id 
     sock.sendto(message, (UDP_IP, UDP_PORT_INFO))
     time.sleep(int(timeout))    
 
