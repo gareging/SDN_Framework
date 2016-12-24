@@ -172,21 +172,28 @@ class SimpleSwitch(app_manager.RyuApp):
                     
             # if ipv4_pkt.src not in self.servers[dpid][(lambda x: x)(self.number_of_servers[dpid])][0]:
             # if ipv4_pkt.src not in self.servers[dpid][(lambda x: x)(self.number_of_servers[dpid])][0]:
-	     n = self.findIPInServerList(self.servers[dpid], ipv4_pkt.src)
-	     if n==-1:
+	     serverID = self.findIPInServerList(self.servers[dpid], ipv4_pkt.src)
+	     if serverID==-1:
                print "Add new server"
-               n = self.number_of_servers[dpid] = self.number_of_servers[dpid] + 1
-               self.servers[dpid][n] = [ipv4_pkt.src,[]]
-               self.servers[dpid][n][1]=[0.0]*len(self.configuration[conf_src][0])
+               serverID = self.number_of_servers[dpid] = self.number_of_servers[dpid] + 1
+               self.servers[dpid][serverID] = [ipv4_pkt.src,[]]
+               self.servers[dpid][serverID][1]=[0.0]*len(self.configuration[conf_src][0])
        
-             message = ','.join(p[0] for p in self.configuration[conf_src][0]) + ";" + self.configuration[conf_src][1] + ";" + str(n)
+             message = ','.join(p[0] for p in self.configuration[conf_src][0]) + ";" + self.configuration[conf_src][1] + ";" + str(serverID)
 	     self.send_udp_reply(dpid, datapath, eth, ipv4_pkt, udp_segment, in_port, message)
 
              print self.servers
 	  
            elif udp_segment.dst_port == 7778:
-             print message           
-          
+             print message
+             recieved_data = re.split(';', message)
+	     serverID = int(recieved_data[1])
+	     values = re.split(',', recieved_data[0])
+             i = 0
+             for value in values:
+               self.servers[dpid][serverID][1][i] = float(value)
+               i += 1         
+             print self.servers
 
     def send_udp_reply(self, dpid, datapath, eth, ipv4_pkt, udp_segment, out_port, message): 
 	ofproto = datapath.ofproto
