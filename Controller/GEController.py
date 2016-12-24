@@ -188,12 +188,15 @@ class SimpleSwitch(app_manager.RyuApp):
              print message
              recieved_data = re.split(';', message)
 	     serverID = int(recieved_data[1])
-	     values = re.split(',', recieved_data[0])
-             i = 0
-             for value in values:
-               self.servers[dpid][serverID][1][i] = float(value)
-               i += 1         
-             print self.servers
+             if serverID not in self.servers[dpid]:
+                print "Server not registered"
+             else:
+	       values = re.split(',', recieved_data[0])
+               i = 0
+               for value in values:
+                 self.servers[dpid][serverID][1][i] = float(value)
+                 i += 1         
+               print self.servers
 
     def send_udp_reply(self, dpid, datapath, eth, ipv4_pkt, udp_segment, out_port, message): 
 	ofproto = datapath.ofproto
