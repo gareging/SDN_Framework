@@ -95,24 +95,6 @@ class SimpleSwitch(app_manager.RyuApp):
 
         print "Configuration validated"
     
-    def ipv4_to_int(self, string):
-       	ip = string.split('.')
-       	assert len(ip) == 4
-       	i = 0
-       	for b in ip:
-    		b = int(b)
-        	i = (i << 8) | b
-        return i
-
-    def findIPInServerList(self, l, ip_address):
-        for i in range (0, len(l)):
-	  if (l[i][0]==ip_address):
-            return i
-          else:
-            continue
- 	return -1
-
-    
     def add_flow(self, datapath, match, act, priority=0, idle_timeout=0, flags=0, cookie=0):
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
@@ -150,12 +132,12 @@ class SimpleSwitch(app_manager.RyuApp):
                            
            self.send_arp_reply(dpid, datapath, eth, arp_pkt, src_ip, dst_ip, in_port, msg)
 
+
         ipv4_pkt = pkt.get_protocol(ipv4.ipv4)
         if ipv4_pkt:
            self.logger.info("ipv4_packet %s", ipv4_pkt)
 
         udp_segment = pkt.get_protocol(udp.udp)
-
         if udp_segment and ipv4_pkt.dst == CONTROLLER_IP:
            self.logger.info("udp %s", udp_segment)
            print "Got UDP packet"	
@@ -172,7 +154,7 @@ class SimpleSwitch(app_manager.RyuApp):
                     
             # if ipv4_pkt.src not in self.servers[dpid][(lambda x: x)(self.number_of_servers[dpid])][0]:
             # if ipv4_pkt.src not in self.servers[dpid][(lambda x: x)(self.number_of_servers[dpid])][0]:
-	     serverID = self.findIPInServerList(self.servers[dpid], ipv4_pkt.src)
+	     serverID = findIPInServerList(self.servers[dpid], ipv4_pkt.src)
 	     if serverID==-1:
                print "Add new server"
                serverID = self.number_of_servers[dpid] = self.number_of_servers[dpid] + 1

@@ -186,6 +186,15 @@ def ipv4_to_int(string):
         	i = (i << 8) | b
         return i
 
+def findIPInServerList(l, ip_address):
+        for i in range (0, len(l)):
+	  if (l[i][0]==ip_address):
+            return i
+          else:
+            continue
+ 	return -1
+
+
 def sendPacketOut( msg, actions, buffer_id=0xffffffff, data=None ):
     datapath = msg.datapath
     parser = datapath.ofproto_parser
