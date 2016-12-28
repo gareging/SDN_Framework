@@ -68,6 +68,7 @@ class SimpleSwitch(app_manager.RyuApp):
 	self.configuration = {}  #table for the configuration: DEFAULT/IP_addess;{PARAM*WEIGHT};TIMEOUT
 	self.number_of_servers = {}
 	self.servers = {}
+        self.serverLoad = [0]
 	#read the configuration file
 	__location__ = os.path.realpath(os.path.join(os.getcwd(), os.path.dirname(__file__))) 
 	with open(os.path.join(__location__, 'config')) as f:
@@ -122,7 +123,7 @@ class SimpleSwitch(app_manager.RyuApp):
 
         arp_pkt = pkt.get_protocol(arp.arp)
         if arp_pkt:
-           self.logger.info("arp %s", arp_pkt)
+          # self.logger.info("arp %s", arp_pkt)
            src_ip = arp_pkt.src_ip
            dst_ip = arp_pkt.dst_ip
 
@@ -136,49 +137,96 @@ class SimpleSwitch(app_manager.RyuApp):
         ipv4_pkt = pkt.get_protocol(ipv4.ipv4)
         if ipv4_pkt:
            self.logger.info("ipv4_packet %s", ipv4_pkt)
+           self.ip_packet_handler(dpid, datapath, eth, msg, pkt, in_port, ipv4_pkt)
 
+    def ip_packet_handler (self, dpid, datapath, eth, msg, pkt, in_port, ipv4_pkt):
+	print "Got IP packet"
         udp_segment = pkt.get_protocol(udp.udp)
+        tcp_segment = pkt.get_protocol(tcp.tcp)
+        parser = datapath.ofproto_parser
+	ofproto = datapath.ofproto
         if udp_segment and ipv4_pkt.dst == CONTROLLER_IP:
-           self.logger.info("udp %s", udp_segment)
-           print "Got UDP packet"	
-           udp_pointer = len(msg.data) - udp_segment.total_length + 8 
-           #udp_parsed = stream_parser.StreamParser().parse(msg.data)
-           message = msg.data[udp_pointer:]
-           if udp_segment.dst_port == 7777 and message == "Hello":
-             print "Server initialization"
-             #send UDP reply with the list of parameters and timeout
-    	     if ipv4_pkt.src in self.configuration:
-                conf_src = ipv4_pkt.src
-             else:
-                conf_src = "DEFAULT"
-                    
-            # if ipv4_pkt.src not in self.servers[dpid][(lambda x: x)(self.number_of_servers[dpid])][0]:
-            # if ipv4_pkt.src not in self.servers[dpid][(lambda x: x)(self.number_of_servers[dpid])][0]:
-	     serverID = findIPInServerList(self.servers[dpid], ipv4_pkt.src)
-	     if serverID==-1:
-               print "Add new server"
-               serverID = self.number_of_servers[dpid] = self.number_of_servers[dpid] + 1
-               self.servers[dpid][serverID] = [ipv4_pkt.src,[]]
-               self.servers[dpid][serverID][1]=[0.0]*len(self.configuration[conf_src][0])
-       
-             message = ','.join(p[0] for p in self.configuration[conf_src][0]) + ";" + self.configuration[conf_src][1] + ";" + str(serverID)
-	     self.send_udp_reply(dpid, datapath, eth, ipv4_pkt, udp_segment, in_port, message)
+           #This packet is for controller
+           self.server_controller_communication(dpid, datapath, eth, msg, in_port, ipv4_pkt, udp_segment)
+        elif tcp_segment:
+	   dl_type_ipv4 = 0x0800
+           timeout = 60
+           #start calling SCHEDULER
+           serverID = 1
+           #end calling SCHEDULER
+           serverIP = self.servers[dpid][serverID][0]
+           serverIP_int = ipv4_to_int(serverIP)
+           serverPORT = self.ip_mac_port[dpid][serverIP][1]
+           serverMAC = self.ip_mac_port[dpid][serverIP][0]
+           self.serverLoad[serverID] += 1
 
-             print self.servers
+           clientIP_int = ipv4_to_int(ipv4_pkt.src)
+           clientPORT = in_port
+
+	   print "Adding FORWARD Flow"
+           match = parser.OFPMatch (dl_type = dl_type_ipv4, nw_src=clientIP_int, 
+                                                            tp_src=tcp_segment.src_port, nw_proto = 6) #TCP proto 6   
+           actions = [parser.OFPActionSetNwDst(serverIP_int),
+                    parser.OFPActionSetDlDst(haddr_to_bin(serverMAC)), parser.OFPActionOutput(serverPORT)]
+           self.add_flow(datapath=datapath, match=match, act=actions, priority=1, idle_timeout=timeout, 
+                        flags=ofproto.OFPFF_SEND_FLOW_REM, cookie=serverID)
+
+	   print "Adding REVERSE Flow"
+	   match = parser.OFPMatch (dl_type = dl_type_ipv4, nw_src=serverIP_int,
+                                    nw_dst=clientIP_int, tp_dst=tcp_segment.src_port)
+           actions = [ parser.OFPActionSetNwSrc (ipv4_to_int(ipv4_pkt.dst)), #REWRITE IP HEADER FOR TCP_HANDSHAKE
+                    parser.OFPActionOutput(clientPORT)]
+           self.add_flow(datapath=datapath, match=match, act=actions, priority=1, idle_timeout=timeout)
+
+           #sending this packet
+           print "Sending the packet out"
+           actions = []
+	   actions.append( createOFAction(datapath, ofproto.OFPAT_OUTPUT, serverPORT) )
+           sendPacketOut(msg=msg, actions=actions, buffer_id=msg.buffer_id) 
+   
+    def server_controller_communication(self, dpid, datapath, eth, msg, in_port, ipv4_pkt, udp_segment):
+	self.logger.info("udp %s", udp_segment)
+        print "Got UDP packet for controller"	
+        #parsing udp segment
+        udp_pointer = len(msg.data) - udp_segment.total_length + 8 
+        message = msg.data[udp_pointer:]
+        if udp_segment.dst_port == 7777 and message == "Hello":
+          print "Server initialization"
+          #send UDP reply with the list of parameters and timeout
+          self.ip_mac_port[dpid][ipv4_pkt.src] = (eth.src, in_port)
+	  if ipv4_pkt.src in self.configuration:
+            conf_src = ipv4_pkt.src
+          else:
+            conf_src = "DEFAULT"
+                    
+          serverID = findIPInServerList(self.servers[dpid], ipv4_pkt.src)
+          if serverID==-1:
+            print "Add new server"
+            serverID = self.number_of_servers[dpid] = self.number_of_servers[dpid] + 1
+            self.servers[dpid][serverID] = [ipv4_pkt.src,[]]
+            self.servers[dpid][serverID][1]=[0.0]*len(self.configuration[conf_src][0])
+            self.serverLoad.append(0)
+       
+          message = ','.join(p[0] for p in self.configuration[conf_src][0]) + ";" + self.configuration[conf_src][1] + ";" + str(serverID)
+	  self.send_udp_reply(dpid, datapath, eth, ipv4_pkt, udp_segment, in_port, message)
+
+          print self.servers
 	  
-           elif udp_segment.dst_port == 7778:
-             print message
-             recieved_data = re.split(';', message)
-	     serverID = int(recieved_data[1])
-             if serverID not in self.servers[dpid]:
-                print "Server not registered"
-             else:
-	       values = re.split(',', recieved_data[0])
-               i = 0
-               for value in values:
-                 self.servers[dpid][serverID][1][i] = float(value)
-                 i += 1         
-               print self.servers
+        elif udp_segment.dst_port == 7778:
+          print message
+          recieved_data = re.split(';', message)
+	  serverID = int(recieved_data[1])
+          if serverID not in self.servers[dpid]:
+            print "Server not registered"
+          else:
+	    values = re.split(',', recieved_data[0])
+            i = 0
+            for value in values:
+              self.servers[dpid][serverID][1][i] = float(value)
+              i += 1         
+            print self.servers
+        
+        print self.ip_mac_port 
 
     def send_udp_reply(self, dpid, datapath, eth, ipv4_pkt, udp_segment, out_port, message): 
 	ofproto = datapath.ofproto
@@ -202,7 +250,7 @@ class SimpleSwitch(app_manager.RyuApp):
         out_port = None
 
 	if dst_ip == CONTROLLER_IP:
-           print "Controller ARP request"
+         #  print "Controller ARP request"
            e = ethernet.ethernet(dst=eth.src, src=CONTROLLER_MAC, ethertype=ether.ETH_TYPE_ARP)
            a = arp.arp(hwtype=1, proto=0x0800, hlen=6, plen=4, opcode=2, src_mac=CONTROLLER_MAC, 
                src_ip=CONTROLLER_IP, dst_mac=eth.src, dst_ip=src_ip)  
@@ -273,5 +321,5 @@ class SimpleSwitch(app_manager.RyuApp):
        #add miss flow
        match = parser.OFPMatch ()
        actions = [parser.OFPActionOutput(ofproto.OFPP_CONTROLLER)]
-       self.add_flow(dp, match, actions, priority=1) 
+       self.add_flow(dp, match, actions, priority=0) 
 
