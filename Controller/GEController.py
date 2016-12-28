@@ -68,7 +68,7 @@ class SimpleSwitch(app_manager.RyuApp):
 	self.configuration = {}  #table for the configuration: DEFAULT/IP_addess;{PARAM*WEIGHT};TIMEOUT
 	self.number_of_servers = {}
 	self.servers = {}
-        self.serverLoad = [0]
+        self.serverLoad = {}
 	#read the configuration file
 	__location__ = os.path.realpath(os.path.join(os.getcwd(), os.path.dirname(__file__))) 
 	with open(os.path.join(__location__, 'config')) as f:
@@ -158,7 +158,8 @@ class SimpleSwitch(app_manager.RyuApp):
            serverIP_int = ipv4_to_int(serverIP)
            serverPORT = self.ip_mac_port[dpid][serverIP][1]
            serverMAC = self.ip_mac_port[dpid][serverIP][0]
-           self.serverLoad[serverID] += 1
+           self.serverLoad[dpid][serverID] += 1
+           print self.serverLoad
 
            clientIP_int = ipv4_to_int(ipv4_pkt.src)
            clientPORT = in_port
@@ -205,7 +206,7 @@ class SimpleSwitch(app_manager.RyuApp):
             serverID = self.number_of_servers[dpid] = self.number_of_servers[dpid] + 1
             self.servers[dpid][serverID] = [ipv4_pkt.src,[]]
             self.servers[dpid][serverID][1]=[0.0]*len(self.configuration[conf_src][0])
-            self.serverLoad.append(0)
+            self.serverLoad[dpid].append(0)
        
           message = ','.join(p[0] for p in self.configuration[conf_src][0]) + ";" + self.configuration[conf_src][1] + ";" + str(serverID)
 	  self.send_udp_reply(dpid, datapath, eth, ipv4_pkt, udp_segment, in_port, message)
@@ -281,8 +282,14 @@ class SimpleSwitch(app_manager.RyuApp):
     @set_ev_cls(ofp_event.EventOFPFlowRemoved, MAIN_DISPATCHER)
     def flow_removal_handler(self, ev):
         msg = ev.msg
-
-
+        dp = msg.datapath
+        dpid = dp.id
+        serverID = msg.cookie
+        self.logger.info("Client released serverID = %d", msg.cookie)
+        if self.serverLoad[dpid][serverID] > 0:
+	   self.serverLoad[dpid][serverID] -= 1
+           print self.serverLoad
+   
     def remove_table_flows(self, datapath, table_id, match):
         """Create OFP flow mod message to remove flows from table."""
         ofproto = datapath.ofproto
@@ -306,8 +313,10 @@ class SimpleSwitch(app_manager.RyuApp):
 
        self.number_of_servers.setdefault(dpid, {})
        self.servers.setdefault(dpid, {})
-       self.number_of_servers[dpid]=0
-       self.servers[dpid][0]=('0')
+       self.serverLoad.setdefault(dpid, {})
+       self.serverLoad[dpid] = [0]
+       self.number_of_servers[dpid] = 0
+       self.servers[dpid][0] = ('0')
        
        #empty the flow table
        flow_mod = self.remove_table_flows(dp, 0,empty_match)
