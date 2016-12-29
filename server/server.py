@@ -2,7 +2,7 @@ import socket, sys, commands, re
 import random, time, math
 
 #controller default PORT and IP
-UDP_IP = 'controller'
+UDP_IP = 'controller-1'
 UDP_PORT_HELLO = 7777
 UDP_PORT_INFO = 7778
 UDP_OUT_PORT=5005
