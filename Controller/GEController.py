@@ -52,7 +52,7 @@ According to its licecse(please don't trust my reading and read it), we can modi
 
 FLOW_HARD_TIMEOUT = 30
 FLOW_IDLE_TIMEOUT = 10
-CONTROLLER_IP = "10.10.4.1"
+CONTROLLER_IP = "10.10.10.10"
 CONTROLLER_MAC = "00:00:00:00:00:01"
 
 
@@ -250,16 +250,13 @@ class SimpleSwitch(app_manager.RyuApp):
 	ofproto = datapath.ofproto
         out_port = None
 
-	if dst_ip == CONTROLLER_IP:
-         #  print "Controller ARP request"
+        if dst_ip in self.ip_mac_port[dpid]:
+           out_port = self.ip_mac_port[dpid][dst_ip][1]
+	else:
+	   print "Controller or unknown ARP request"
            e = ethernet.ethernet(dst=eth.src, src=CONTROLLER_MAC, ethertype=ether.ETH_TYPE_ARP)
            a = arp.arp(hwtype=1, proto=0x0800, hlen=6, plen=4, opcode=2, src_mac=CONTROLLER_MAC, 
-               src_ip=CONTROLLER_IP, dst_mac=eth.src, dst_ip=src_ip)  
-    
-        elif dst_ip in self.ip_mac_port[dpid]:
-           out_port = self.ip_mac_port[dpid][dst_ip][1]
-        else:
-           out_port = ofproto.OFPP_FLOOD
+                src_ip=dst_ip, dst_mac=eth.src, dst_ip=src_ip)  
          
         if (out_port != None):
            actions = [datapath.ofproto_parser.OFPActionOutput(out_port)] 
