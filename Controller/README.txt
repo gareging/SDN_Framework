@@ -17,7 +17,8 @@ Example:
 self.serverLoad: current serverLoad (key - SWITCH ID)
 {99768326352716: [0, 110, 23, 33]}
 
-self.switchServerNeighborInfo: ovs neighbors for each switch. key - SWITCH ID and out_port number
-{257586063102025: {1: 182742580152133, 6: 240693707322189}, 182742580152133: {1: 257586063102025, 2: 240693707322189}, 240693707322189: {3: 257586063102025, 4: 182742580152133}}
+self.switchServerNeighborInfo: ovs neighbors for each switch. key - SWITCH ID and neighbor SWITCH ID. In the future the link cost may be added.
+{257586063102025: {240693707322189: 6}, 240693707322189: {257586063102025: 3}}
+
 
 
