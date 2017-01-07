@@ -69,6 +69,7 @@ class SimpleSwitch(app_manager.RyuApp):
 	self.number_of_servers = {}
 	self.servers = {}
         self.serverLoad = {}
+	self.switchNeighborInfo = {}
 	#read the configuration file
 	__location__ = os.path.realpath(os.path.join(os.getcwd(), os.path.dirname(__file__))) 
 	with open(os.path.join(__location__, 'config')) as f:
@@ -209,7 +210,8 @@ class SimpleSwitch(app_manager.RyuApp):
             self.serverLoad[dpid].append(0)
        
           message = ','.join(p[0] for p in self.configuration[conf_src][0]) + ";" + self.configuration[conf_src][1] + ";" + str(serverID)
-	  self.send_udp_reply(dpid, datapath, eth, ipv4_pkt, udp_segment, in_port, message)
+	  self.send_udp_reply(dpid, datapath, eth.src, CONTROLLER_MAC, 
+                  ipv4_pkt.src, ipv4_pkt.dst, udp_segment.src_port, udp_sergment.dst_port, in_port, message)
 
           print self.servers
 	  
@@ -226,14 +228,24 @@ class SimpleSwitch(app_manager.RyuApp):
               self.servers[dpid][serverID][1][i] = float(value)
               i += 1         
             print self.servers
-        
-        print self.ip_mac_port 
+        #switch discover UDP segment. 7779 - recieved packet; 7780 - response so the flooder-switch will register the
+        #port too
+        elif udp_segment.dst_port == 7779:
+          self.switchNeighborInfo[dpid][in_port] = int(message)
+          self.send_udp_reply(dpid, datapath, CONTROLLER_MAC, CONTROLLER_MAC, 
+                           CONTROLLER_IP, CONTROLLER_IP, 7780, 7780, in_port, str(dpid))
 
-    def send_udp_reply(self, dpid, datapath, eth, ipv4_pkt, udp_segment, out_port, message): 
+        elif udp_segment.dst_port == 7780:
+          self.switchNeighborInfo[dpid][in_port] = int(message)
+
+       # print self.ip_mac_port 
+        print self.switchNeighborInfo
+
+    def send_udp_reply(self, dpid, datapath, eth_dst, eth_src, ipv4_dst, ipv4_src, udp_dst, udp_src, out_port, message): 
 	ofproto = datapath.ofproto
-        e = ethernet.ethernet(dst=eth.src, src=CONTROLLER_MAC, ethertype=ether.ETH_TYPE_IP)
-        i = ipv4.ipv4(dst=ipv4_pkt.src, src=ipv4_pkt.dst, proto=17, total_length=0)
-        u = udp.udp(src_port=udp_segment.dst_port, dst_port=udp_segment.src_port, total_length=0, csum=0)
+        e = ethernet.ethernet(dst=eth_dst, src=eth_src, ethertype=ether.ETH_TYPE_IP)
+        i = ipv4.ipv4(dst=ipv4_dst, src=ipv4_src, proto=17, total_length=0)
+        u = udp.udp(src_port=udp_src, dst_port=udp_dst, total_length=0, csum=0)
         udp_h = u.serialize(message, i)
         ip_h = i.serialize(udp_h + message, e)
         eth_h = e.serialize(ip_h + udp_h + message, None)
@@ -311,6 +323,7 @@ class SimpleSwitch(app_manager.RyuApp):
        self.number_of_servers.setdefault(dpid, {})
        self.servers.setdefault(dpid, {})
        self.serverLoad.setdefault(dpid, {})
+       self.switchNeighborInfo.setdefault(dpid, {})
        self.serverLoad[dpid] = [0]
        self.number_of_servers[dpid] = 0
        self.servers[dpid][0] = ('0')
@@ -322,10 +335,13 @@ class SimpleSwitch(app_manager.RyuApp):
        #process arp packets normally
        actions = [parser.OFPActionOutput(ofproto.OFPP_NORMAL)]    
        match = parser.OFPMatch(dl_type = dl_type_arp)
-#       self.add_flow(dp, match, actions, priority=100)
+       #self.add_flow(dp, match, actions, priority=100)
 
        #add miss flow
        match = parser.OFPMatch ()
        actions = [parser.OFPActionOutput(ofproto.OFPP_CONTROLLER)]
-       self.add_flow(dp, match, actions, priority=0) 
-
+       self.add_flow(dp, match, actions, priority=0)
+ 
+       #send switch discover packet
+       self.send_udp_reply(dpid, dp, CONTROLLER_MAC, CONTROLLER_MAC, 
+                           CONTROLLER_IP, CONTROLLER_IP, 7779, 7779, ofproto.OFPP_FLOOD, str(dpid))
