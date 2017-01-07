@@ -231,12 +231,12 @@ class SimpleSwitch(app_manager.RyuApp):
         #switch discover UDP segment. 7779 - recieved packet; 7780 - response so the flooder-switch will register the
         #port too
         elif udp_segment.dst_port == 7779:
-          self.switchNeighborInfo[dpid][in_port] = int(message)
+          self.switchNeighborInfo[dpid][int(message)] = in_port
           self.send_udp_reply(dpid, datapath, CONTROLLER_MAC, CONTROLLER_MAC, 
                            CONTROLLER_IP, CONTROLLER_IP, 7780, 7780, in_port, str(dpid))
 
         elif udp_segment.dst_port == 7780:
-          self.switchNeighborInfo[dpid][in_port] = int(message)
+          self.switchNeighborInfo[dpid][int(message)] = in_port
 
        # print self.ip_mac_port 
         print self.switchNeighborInfo
