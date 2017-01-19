@@ -37,9 +37,17 @@ def main():
   #send the message
   sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) # UDP
   sock.bind(('', UDP_OUT_PORT))
-  sock.sendto(message, (UDP_IP, UDP_PORT_HELLO))
-
-  data, addr = sock.recvfrom(1024) # buffer size is 1024 bytes
+  sock.settimeout(5)
+  while True:
+    sock.sendto(message, (UDP_IP, UDP_PORT_HELLO))
+    print "Sending hello message"
+    time.sleep(1)
+    try:
+      data, addr = sock.recvfrom(1024) # buffer size is 1024 bytes
+    except socket.timeout:
+        print "No data available"
+        continue
+    break
   print "received message:", data
   split_line = re.split(';',data)
   parameters = tuple(re.split(',',split_line[0]))
