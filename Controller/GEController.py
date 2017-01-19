@@ -211,7 +211,7 @@ class SimpleSwitch(app_manager.RyuApp):
        
           message = ','.join(p[0] for p in self.configuration[conf_src][0]) + ";" + self.configuration[conf_src][1] + ";" + str(serverID)
 	  self.send_udp_reply(dpid, datapath, eth.src, CONTROLLER_MAC, 
-                  ipv4_pkt.src, ipv4_pkt.dst, udp_segment.src_port, udp_sergment.dst_port, in_port, message)
+                  ipv4_pkt.src, ipv4_pkt.dst, udp_segment.src_port, udp_segment.dst_port, in_port, message)
 
           print self.servers
 	  
@@ -219,7 +219,7 @@ class SimpleSwitch(app_manager.RyuApp):
           print message
           recieved_data = re.split(';', message)
 	  serverID = int(recieved_data[1])
-          if serverID not in self.servers[dpid]:
+          if ((serverID not in self.servers[dpid]) or serverID == 0):
             print "Server not registered"
           else:
 	    values = re.split(',', recieved_data[0])
@@ -345,3 +345,4 @@ class SimpleSwitch(app_manager.RyuApp):
        #send switch discover packet
        self.send_udp_reply(dpid, dp, CONTROLLER_MAC, CONTROLLER_MAC, 
                            CONTROLLER_IP, CONTROLLER_IP, 7779, 7779, ofproto.OFPP_FLOOD, str(dpid))
+
