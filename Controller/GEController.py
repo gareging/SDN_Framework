@@ -221,6 +221,9 @@ class SimpleSwitch(app_manager.RyuApp):
 	  serverID = int(recieved_data[1])
           if ((serverID not in self.servers[dpid]) or serverID == 0):
             print "Server not registered"
+            self.send_udp_reply(dpid, datapath, CONTROLLER_MAC, CONTROLLER_MAC, 
+                           CONTROLLER_IP, CONTROLLER_IP, udp_segment.src_port, udp_segment.dst_port, in_port, "404")
+
           else:
 	    values = re.split(',', recieved_data[0])
             i = 0
