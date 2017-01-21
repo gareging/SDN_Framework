@@ -70,6 +70,7 @@ class SimpleSwitch(app_manager.RyuApp):
 	self.servers = {}
         self.serverLoad = {}
 	self.switchNeighborInfo = {}
+        self.T = {}
 	#read the configuration file
 	__location__ = os.path.realpath(os.path.join(os.getcwd(), os.path.dirname(__file__))) 
 	with open(os.path.join(__location__, 'config')) as f:
@@ -204,10 +205,13 @@ class SimpleSwitch(app_manager.RyuApp):
           serverID = findIPInServerList(self.servers[dpid], ipv4_pkt.src)
           if serverID==-1:
             print "Add new server"
-            serverID = self.number_of_servers[dpid] = self.number_of_servers[dpid] + 1
+            serverID = self.number_of_servers[dpid]
+            self.number_of_servers[dpid] += 1
             self.servers[dpid][serverID] = [ipv4_pkt.src,[]]
             self.servers[dpid][serverID][1]=[0.0]*len(self.configuration[conf_src][0])
             self.serverLoad[dpid].append(0)
+            self.T[dpid].append(0)
+            print self.T 
        
           message = ','.join(p[0] for p in self.configuration[conf_src][0]) + ";" + self.configuration[conf_src][1] + ";" + str(serverID)
 	  self.send_udp_reply(dpid, datapath, eth.src, CONTROLLER_MAC, 
@@ -231,6 +235,10 @@ class SimpleSwitch(app_manager.RyuApp):
               self.servers[dpid][serverID][1][i] = float(value)
               i += 1         
             print self.servers
+            print "Value received"
+            self.send_udp_reply(dpid, datapath, CONTROLLER_MAC, CONTROLLER_MAC, 
+                           CONTROLLER_IP, CONTROLLER_IP, udp_segment.src_port, udp_segment.dst_port, in_port, "OK")
+
         #switch discover UDP segment. 7779 - recieved packet; 7780 - response so the flooder-switch will register the
         #port too
         elif udp_segment.dst_port == 7779:
@@ -242,7 +250,8 @@ class SimpleSwitch(app_manager.RyuApp):
           self.switchNeighborInfo[dpid][int(message)] = in_port
 
        # print self.ip_mac_port 
-        print self.switchNeighborInfo
+        print "Switch", dpid, "neighbors"
+        print self.switchNeighborInfo[dpid].keys()
 
     def send_udp_reply(self, dpid, datapath, eth_dst, eth_src, ipv4_dst, ipv4_src, udp_dst, udp_src, out_port, message): 
 	ofproto = datapath.ofproto
@@ -327,9 +336,11 @@ class SimpleSwitch(app_manager.RyuApp):
        self.servers.setdefault(dpid, {})
        self.serverLoad.setdefault(dpid, {})
        self.switchNeighborInfo.setdefault(dpid, {})
-       self.serverLoad[dpid] = [0]
+       self.serverLoad[dpid] = []
        self.number_of_servers[dpid] = 0
-       self.servers[dpid][0] = ('0')
+       self.T.setdefault(dpid, {})
+       self.T[dpid] = []
+       #self.servers[dpid][0] = ('0')
        
        #empty the flow table
        flow_mod = self.remove_table_flows(dp, 0,empty_match)
