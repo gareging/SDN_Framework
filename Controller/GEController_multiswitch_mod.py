@@ -452,8 +452,8 @@ class SimpleSwitch(app_manager.RyuApp):
             serverID = self.servers_on_switch[s][i]  
             V[s][i]=(self.server_info[serverID][GE_index])*(W1)*((1.0/MaxGreen)*100)+ Valuedelay  # remember to calculate the proper N1 and N2 and devide by T
             Metrics[s][i]=V[s][i]/self.T[s][i]
-        #  print "SEE METRICS"
-        #  print Metrics
+          print "SEE METRICS"
+          print Metrics
 
         maxvalue=0
     	Maxserver=0
@@ -462,18 +462,20 @@ class SimpleSwitch(app_manager.RyuApp):
 
      
 	for z in Metrics: #z is the switch id
-          if max(Metrics[z])>maxvalue:
+          if Metrics[z] and max(Metrics[z])>maxvalue:
             maxvalue=max(Metrics[z])
             Maxserver=Metrics[z].index(max(Metrics[z]))
             Maxsid=z        
         
         for s in Neighborhood:
-       	  for i in range(0,self.number_of_servers[dpid]):
+       	  for i in range(0,self.number_of_servers[s]):
             if s==Maxsid and i==Maxserver:
               self.T[s][i]=(1.0-(1.0/tc))*self.T[s][i]+((1.0/tc))*V[s][i]
             else:
               self.T[s][i]=(1.0-(1.0/tc))*self.T[s][i]
-       
+
+        print "Scheduler chooses", Maxserver 
+        print "Switch", Maxsid
         MaxserverID = self.servers_on_switch[Maxsid][Maxserver]         
 	return Maxsid,MaxserverID
 
