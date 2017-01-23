@@ -260,8 +260,15 @@ class SimpleSwitch(app_manager.RyuApp):
             conf_src = ipv4_pkt.src
           else:
             conf_src = "DEFAULT"
-                    
-          serverID = findIPInServerList(self.server_ip, ipv4_pkt.src)
+         
+          try:   
+            serverID = self.server_ip.index(ipv4_pkt.src)
+            print "serverID found", serverID
+          except:
+            serverID = -1
+            print "serverID not found"
+
+
           message = ""
           if serverID==-1:
             print "Add new server"
@@ -284,7 +291,6 @@ class SimpleSwitch(app_manager.RyuApp):
           if (message == ""):
             for parameter in self.configuration[conf_src]:
               if parameter!='t':
-                self.server_info[serverID].append(0.0)
                 message += parameter + ","
 
      
@@ -301,8 +307,8 @@ class SimpleSwitch(app_manager.RyuApp):
 	  serverID = int(recieved_data[1])
           if (serverID not in self.servers_on_switch[dpid]):
             print "Server not registered"
-            self.send_udp_reply(dpid, datapath, CONTROLLER_MAC, CONTROLLER_MAC, 
-                           CONTROLLER_IP, CONTROLLER_IP, udp_segment.src_port, udp_segment.dst_port, in_port, "404")
+            self.send_udp_reply(dpid, datapath, eth.src, CONTROLLER_MAC, 
+                           ipv4_pkt.src, CONTROLLER_IP, udp_segment.src_port, udp_segment.dst_port, in_port, "404")
 
           else:
 	    values = re.split(',', recieved_data[0])
@@ -312,8 +318,8 @@ class SimpleSwitch(app_manager.RyuApp):
               i += 1         
             print self.server_info
             print "Value received"
-            self.send_udp_reply(dpid, datapath, CONTROLLER_MAC, CONTROLLER_MAC, 
-                           CONTROLLER_IP, CONTROLLER_IP, udp_segment.src_port, udp_segment.dst_port, in_port, "OK")
+            self.send_udp_reply(dpid, datapath, eth.src, CONTROLLER_MAC, 
+                           ipv4_pkt.src, CONTROLLER_IP, udp_segment.src_port, udp_segment.dst_port, in_port, "OK")
 
         #switch discover UDP segment. 7779 - recieved packet; 7780 - response so the flooder-switch will register the
         #port too
