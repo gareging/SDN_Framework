@@ -70,6 +70,7 @@ class SimpleSwitch(app_manager.RyuApp):
 	self.servers = {}
         self.serverLoad = {}
 	self.switchNeighborInfo = {}
+        self.dpid_to_datapath = {}
         self.T = {}
 	#read the configuration file
 	__location__ = os.path.realpath(os.path.join(os.getcwd(), os.path.dirname(__file__))) 
@@ -123,26 +124,31 @@ class SimpleSwitch(app_manager.RyuApp):
         dst = eth.dst
         src = eth.src
 
+        #save arp values
+
         arp_pkt = pkt.get_protocol(arp.arp)
         if arp_pkt:
           # self.logger.info("arp %s", arp_pkt)
            src_ip = arp_pkt.src_ip
            dst_ip = arp_pkt.dst_ip
+           self.ip_mac_port[dpid][src_ip] = (src, in_port)
+           print self.ip_mac_port                  
 
            #save ip to mac and port correspondance
-           self.ip_mac_port[dpid][src_ip] = (src, in_port)
-           print self.ip_mac_port[dpid][src_ip]                  
                            
            self.send_arp_reply(dpid, datapath, eth, arp_pkt, src_ip, dst_ip, in_port, msg)
-
+       
+          
 
         ipv4_pkt = pkt.get_protocol(ipv4.ipv4)
         if ipv4_pkt:
-           self.logger.info("ipv4_packet %s", ipv4_pkt)
+          # self.logger.info("ipv4_packet %s", ipv4_pkt)
+           self.ip_mac_port[dpid][ipv4_pkt.src] = (src, in_port)
            self.ip_packet_handler(dpid, datapath, eth, msg, pkt, in_port, ipv4_pkt)
+           
 
     def ip_packet_handler (self, dpid, datapath, eth, msg, pkt, in_port, ipv4_pkt):
-	print "Got IP packet"
+	print "Got IP packet for dpid", dpid
         udp_segment = pkt.get_protocol(udp.udp)
         tcp_segment = pkt.get_protocol(tcp.tcp)
         parser = datapath.ofproto_parser
@@ -156,13 +162,18 @@ class SimpleSwitch(app_manager.RyuApp):
            #start calling SCHEDULER
           
            newDPID, serverID = self.PropFair(dpid)
+           print "newDPID", newDPID
+           print "serverID", serverID
            #end calling SCHEDULER
            serverIP = self.servers[newDPID][serverID][0]
            serverIP_int = ipv4_to_int(serverIP)
            serverPORT = self.ip_mac_port[newDPID][serverIP][1]
            serverMAC = self.ip_mac_port[newDPID][serverIP][0]
-           self.serverLoad[newDPID][serverID] += 1
-           print self.serverLoad
+           print "serverIP", serverIP
+           print "serverPORT", serverPORT
+           print "serverMAC", serverMAC
+
+           #print self.serverLoad
 
            clientIP_int = ipv4_to_int(ipv4_pkt.src)
            clientPORT = in_port
@@ -181,7 +192,7 @@ class SimpleSwitch(app_manager.RyuApp):
            else:
              actions = [parser.OFPActionSetNwDst(serverIP_int),
                                   parser.OFPActionSetDlDst(haddr_to_bin(serverMAC)), 
-                                  parser.OFPActionOutput( self.swtichNeighborInfo[dpid][newDPID] )]
+                                  parser.OFPActionOutput( self.switchNeighborInfo[dpid][newDPID] )]
  
              self.add_flow(datapath=datapath, match=match, act=actions, priority=1, idle_timeout=timeout, 
                           flags=ofproto.OFPFF_SEND_FLOW_REM, cookie=serverID)
@@ -200,7 +211,10 @@ class SimpleSwitch(app_manager.RyuApp):
            self.add_flow(datapath=datapath, match=match, act=actions, priority=1, idle_timeout=timeout)
 
            if dpid != newDPID:
+               print "Install the reverse flow into transition switch"
                actions = [ parser.OFPActionOutput(self.switchNeighborInfo[newDPID][dpid])]
+               self.add_flow(datapath=self.dpid_to_datapath[newDPID], match=match, 
+                                  act=actions, priority=1, idle_timeout=timeout)
                  
            if dpid==newDPID:
            #sending this packet
@@ -211,8 +225,10 @@ class SimpleSwitch(app_manager.RyuApp):
 
            else:
              actions = []
-       	     actions.append( createOFAction(datapath, ofproto.OFPAT_OUTPUT, self.swtichNeighborInfo[dpid][newDPID]) )
+       	     actions.append( createOFAction(datapath, ofproto.OFPAT_OUTPUT, self.switchNeighborInfo[dpid][newDPID]) )
              sendPacketOut(msg=msg, actions=actions, buffer_id=msg.buffer_id) 
+
+           self.serverLoad[newDPID][serverID] += 1
                 
    
     def server_controller_communication(self, dpid, datapath, eth, msg, in_port, ipv4_pkt, udp_segment):
@@ -239,13 +255,13 @@ class SimpleSwitch(app_manager.RyuApp):
             self.servers[dpid][serverID][1]=[0.0]*len(self.configuration[conf_src][0])
             self.serverLoad[dpid].append(0)
             self.T[dpid].append(1)
-            print self.T 
+        #    print self.T 
        
           message = ','.join(p[0] for p in self.configuration[conf_src][0]) + ";" + self.configuration[conf_src][1] + ";" + str(serverID)
 	  self.send_udp_reply(dpid, datapath, eth.src, CONTROLLER_MAC, 
                   ipv4_pkt.src, ipv4_pkt.dst, udp_segment.src_port, udp_segment.dst_port, in_port, message)
 
-          print self.servers
+         # print self.servers
 	  
         elif udp_segment.dst_port == 7778:
           print message
@@ -278,11 +294,11 @@ class SimpleSwitch(app_manager.RyuApp):
           self.switchNeighborInfo[dpid][int(message)] = in_port
 
        # print self.ip_mac_port 
-        print "Switch", dpid, "neighbors"
-        print self.switchNeighborInfo[dpid].keys()
+       # print "Switch", dpid, "neighbors"
+       # print self.switchNeighborInfo[dpid].keys()
 
 
-        print self.switchNeighborInfo
+        #print self.switchNeighborInfo
 
     def send_udp_reply(self, dpid, datapath, eth_dst, eth_src, ipv4_dst, ipv4_src, udp_dst, udp_src, out_port, message): 
 	ofproto = datapath.ofproto
@@ -304,27 +320,36 @@ class SimpleSwitch(app_manager.RyuApp):
     def send_arp_reply(self, dpid, datapath, eth, arp_pkt, src_ip, dst_ip, in_port, msg):
 	ofproto = datapath.ofproto
         out_port = None
-
-        if dst_ip in self.ip_mac_port[dpid]:
-           out_port = self.ip_mac_port[dpid][dst_ip][1]
-	else:
+        mac_found = ""
+        
+        print "This guy is looking for ARP", src_ip
+        print "Here's what he's looking for", dst_ip
+        for dp, values in self.ip_mac_port.items():
+          print values
+          if dst_ip in values:
+            mac_found = values[dst_ip][0]
+            out_port = in_port
+            e = ethernet.ethernet(dst=eth.src, src=CONTROLLER_MAC, ethertype=ether.ETH_TYPE_ARP)
+            a = arp.arp(hwtype=1, proto=0x0800, hlen=6, plen=4, opcode=2, src_mac=mac_found, 
+                src_ip=dst_ip, dst_mac=eth.src, dst_ip=src_ip)  
+            break
+	
+        if out_port == None:
 	   print "Controller or unknown ARP request"
            e = ethernet.ethernet(dst=eth.src, src=CONTROLLER_MAC, ethertype=ether.ETH_TYPE_ARP)
            a = arp.arp(hwtype=1, proto=0x0800, hlen=6, plen=4, opcode=2, src_mac=CONTROLLER_MAC, 
-                src_ip=dst_ip, dst_mac=eth.src, dst_ip=src_ip)  
-         
-        if (out_port != None):
-           actions = [datapath.ofproto_parser.OFPActionOutput(out_port)] 
-           data = msg.data
+                src_ip=dst_ip, dst_mac=eth.src, dst_ip=src_ip) 
+           out_port = in_port
 
-	else:
-	   p = packet.Packet()
-           p.add_protocol(e)
-           p.add_protocol(a)
-           p.serialize()
-           actions = [datapath.ofproto_parser.OFPActionOutput(in_port)]
-           data = p.data
-           
+
+    	p = packet.Packet()
+        p.add_protocol(e)
+        p.add_protocol(a)
+        p.serialize()
+        data = p.data
+      
+        actions = [datapath.ofproto_parser.OFPActionOutput(out_port)] 
+
 	out = datapath.ofproto_parser.OFPPacketOut(datapath=datapath, buffer_id=0xffffffff,
             in_port=datapath.ofproto.OFPP_CONTROLLER,
             actions=actions, data=data)
@@ -359,20 +384,40 @@ class SimpleSwitch(app_manager.RyuApp):
     	V={}
     	Metrics={}
     	Max={}
+        W1 = int(self.configuration["DEFAULT"][0][0][1]) #hardcoded: GE weight
+        W2 = int(self.configuration["DEFAULT"][0][2][1]) #hardcoded: DL weight
+        Maxdelay=30  
+        MaxGreen=1000
+        Valuedelay = 0
+       # print "NUMBER OF SERVERS"
+       # print self.number_of_servers
+       # print "SEE NEIGHBORHOOD"
+       # print Neighborhood
+       # print "DPID", dpid
     	for s in Neighborhood:
           if s==dpid:
-            delay=0 #delay between switch that users are connected to the servers in that switch is negligable 
+            delay=1 #delay between switch that users are connected to the servers in that switch is negligable 
           else:
             delay=20 #we assume the delay to next hop is almost the same for switches in a neighbourhood        
-    	V.setdefault(s,[0]*self.number_of_servers[dpid])
-    	Metrics.setdefault(s,[0]*self.number_of_servers[dpid])
-        for i in range(0,self.number_of_servers[s]):
-              V[s][i]=(self.servers[s][i][1][0])*(W1)*(N2)+(delay)*(w2)*(N1)  # remember to calculate the proper N1 and N2 and devide by T
-              Metrics[s][i]=V[s][i]/T[s][i]
+    	  V.setdefault(s,[0]*self.number_of_servers[s])
+    	  Metrics.setdefault(s,[0]*self.number_of_servers[s])
+          for i in range(0,self.number_of_servers[s]):
+            if (delay >= Maxdelay):
+              Valuedelay=0
+            else:  
+              Valuedelay=(1.0/delay)*(100)*(W2)  
+            V[s][i]=(self.servers[s][i][1][0])*(W1)*((1.0/MaxGreen)*100)+ Valuedelay  # remember to calculate the proper N1 and N2 and devide by T
+            Metrics[s][i]=V[s][i]/self.T[s][i]
+        #  print "SEE METRICS"
+        #  print Metrics
+
         maxvalue=0
     	Maxserver=0
-   
-	for z in Metrics:
+        Maxsid=0        
+
+
+     
+	for z in Metrics: #z is the switch id
           if max(Metrics[z])>maxvalue:
             maxvalue=max(Metrics[z])
             Maxserver=Metrics[z].index(max(Metrics[z]))
@@ -380,35 +425,12 @@ class SimpleSwitch(app_manager.RyuApp):
         
         for s in Neighborhood:
        	  for i in range(0,self.number_of_servers[dpid]):
-            if s==MAXSid and i==MaxServer:
+            if s==Maxsid and i==Maxserver:
               self.T[s][i]=(1.0-(1.0/tc))*self.T[s][i]+((1.0/tc))*V[s][i]
             else:
               self.T[s][i]=(1.0-(1.0/tc))*self.T[s][i]
                 
 	return Maxsid,Maxserver
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
     @set_ev_cls(dpset.EventDP, dpset.DPSET_EV_DISPATCHER)
@@ -425,6 +447,7 @@ class SimpleSwitch(app_manager.RyuApp):
        empty_match = parser.OFPMatch()
        instructions = []
 
+       self.dpid_to_datapath[dpid] = dp
        self.number_of_servers.setdefault(dpid, {})
        self.servers.setdefault(dpid, {})
        self.serverLoad.setdefault(dpid, {})
