@@ -55,7 +55,8 @@ def main():
   id = split_line[2]
   print "Timeout", timeout
   print "Parameters", parameters
-
+  
+  sock.settimeout(10)
   v = 0.0
   metrics = 0
   while True:
@@ -70,10 +71,17 @@ def main():
       message += str(v) + ',' #sending only value for now
     message = message[:-1] + ";" + id 
     sock.sendto(message, (UDP_IP, UDP_PORT_INFO))
+    try:
+      data, addr = sock.recvfrom(1024) # buffer size is 1024 bytes
+    except socket.timeout:
+        print "Send it again"
+        continue
+    if data == "404":
+        break
+
     time.sleep(int(timeout))    
 
 if __name__ == "__main__":
-  main()
-
-
+ while True:
+   main()
       
