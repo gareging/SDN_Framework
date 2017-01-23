@@ -43,6 +43,7 @@ from ryu.lib.packet import packet_base
 from netaddr import *
 from utils import *
 from ryu.lib.mac import haddr_to_bin
+from collections import OrderedDict
 #from PropFair import *
 
 '''
@@ -83,17 +84,21 @@ class SimpleSwitch(app_manager.RyuApp):
 	       continue
 	     split_line = re.split(';',line[:-1])
              server = split_line[0]
-             parameters_weights = re.split(',',split_line[1])
+             self.configuration[server] = OrderedDict()
+             parameters_and_weights = re.split(',',split_line[1])
              parameter_list = []
-             for pw in parameters_weights:
-               parameter = re.split('\*',pw)
-               if len(parameter)==1:
+             for pw in parameters_and_weights:
+               parsed = re.split('\*',pw)
+               parameter = parsed[0] 
+               parameter_weight = 0
+               if len(parsed)==1:
                   #in case if we don't specify the weight
-                  parameter.append(100/len(parameters_weights))
-               parameter_list.append(tuple(parameter))
+                  parameter_weight = 100/len(parameters_and_weights)
+               else:
+                  parameter_weight = parsed[1]
+               self.configuration[server][parameter] = int(parameter_weight)
 	     timeout = split_line[2]
-	     self.configuration.setdefault(server, {})
-             self.configuration[server] = (parameter_list, timeout)
+             self.configuration[server]["t"] = timeout
 	print self.configuration
 
         if "DEFAULT" not in self.configuration:
@@ -162,12 +167,19 @@ class SimpleSwitch(app_manager.RyuApp):
         elif tcp_segment:
 	   dl_type_ipv4 = 0x0800
            timeout = 60
+
+           conf_src = ""
+           if ipv4_pkt.src in self.configuration:
+             conf_src = ipv4_pkt.src
+           else:
+             conf_src = "DEFAULT"
+
            #start calling SCHEDULER
-          
-           newDPID, serverID = self.PropFair(dpid)
+           newDPID, serverID = self.PropFair(dpid, conf_src)
            print "newDPID", newDPID
            print "serverID", serverID
            #end calling SCHEDULER
+
            serverIP = self.server_ip[serverID]
            serverIP_int = ipv4_to_int(serverIP)
            serverPORT = self.ip_mac_port[newDPID][serverIP][1]
@@ -232,7 +244,7 @@ class SimpleSwitch(app_manager.RyuApp):
              sendPacketOut(msg=msg, actions=actions, buffer_id=msg.buffer_id) 
 
            self.server_load[serverID] += 1
-                
+           print self.server_load     
    
     def server_controller_communication(self, dpid, datapath, eth, msg, in_port, ipv4_pkt, udp_segment):
 	self.logger.info("udp %s", udp_segment)
@@ -250,6 +262,7 @@ class SimpleSwitch(app_manager.RyuApp):
             conf_src = "DEFAULT"
                     
           serverID = findIPInServerList(self.server_ip, ipv4_pkt.src)
+          message = ""
           if serverID==-1:
             print "Add new server"
             serverID = self.maxID = self.maxID + 1
@@ -257,8 +270,10 @@ class SimpleSwitch(app_manager.RyuApp):
             self.number_of_servers[dpid] += 1
             self.server_ip.append(ipv4_pkt.src)
             self.server_info.append([])
-            for i in range (0, len(self.configuration[conf_src][0])):
-              self.server_info[serverID].append(0.0)
+            for parameter in self.configuration[conf_src]:
+              if parameter!='t':
+                self.server_info[serverID].append(0.0)
+                message += parameter + ","
             self.server_load.append(0)
             self.servers_on_switch[dpid].append(serverID)
             self.T[dpid].append(1)
@@ -266,7 +281,15 @@ class SimpleSwitch(app_manager.RyuApp):
             print self.server_info
         #    print self.T 
        
-          message = ','.join(p[0] for p in self.configuration[conf_src][0]) + ";" + self.configuration[conf_src][1] + ";" + str(serverID)
+          if (message == ""):
+            for parameter in self.configuration[conf_src]:
+              if parameter!='t':
+                self.server_info[serverID].append(0.0)
+                message += parameter + ","
+
+     
+          message = message[:-1] + ";" + self.configuration[conf_src]["t"] + ";" + str(serverID)
+ #         message = ','.join(p[0] for p in self.configuration[conf_src][0]) + ";" + self.configuration[conf_src][1] + ";" + str(serverID)
 	  self.send_udp_reply(dpid, datapath, eth.src, CONTROLLER_MAC, 
                   ipv4_pkt.src, ipv4_pkt.dst, udp_segment.src_port, udp_segment.dst_port, in_port, message)
 
@@ -383,7 +406,7 @@ class SimpleSwitch(app_manager.RyuApp):
                              cookie=0, idle_timeout=0,out_port=65535, buffer_id=4294967295, flags=0, hard_timeout=0,priority=0, actions=[])
         return flow_mod
 
-    def PropFair(self, dpid):
+    def PropFair(self, dpid, conf_src):
     	#getting Sid of the switch that particular user is connected to
     	#Server_Per_Switch=self.number_of_servers[dpid]
     	#Number_Switches_in_neighbourhood=len(self.switchNeighborInfo[dpid].keys())+1
@@ -393,8 +416,13 @@ class SimpleSwitch(app_manager.RyuApp):
     	V={}
     	Metrics={}
     	Max={}
-        W1 = int(self.configuration["DEFAULT"][0][0][1]) #hardcoded: GE weight
-        W2 = int(self.configuration["DEFAULT"][0][2][1]) #hardcoded: DL weight
+        W1 = self.configuration[conf_src]['GE'] #GE weight
+        W2 = self.configuration[conf_src]['DL']
+
+        GE_index = 0 #self.configuration[conf_src].keys().index('GE') #GE position read from the configuration
+        DL_index = 1 #self.configuration[conf_src].keys().index('DL')
+
+        print "GE index", GE_index
         Maxdelay=30  
         MaxGreen=1000
         Valuedelay = 0
@@ -416,7 +444,7 @@ class SimpleSwitch(app_manager.RyuApp):
             else:  
               Valuedelay=(1.0/delay)*(100)*(W2)
             serverID = self.servers_on_switch[s][i]  
-            V[s][i]=(self.server_info[serverID][0])*(W1)*((1.0/MaxGreen)*100)+ Valuedelay  # remember to calculate the proper N1 and N2 and devide by T
+            V[s][i]=(self.server_info[serverID][GE_index])*(W1)*((1.0/MaxGreen)*100)+ Valuedelay  # remember to calculate the proper N1 and N2 and devide by T
             Metrics[s][i]=V[s][i]/self.T[s][i]
         #  print "SEE METRICS"
         #  print Metrics
