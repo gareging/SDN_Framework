@@ -59,6 +59,8 @@ def main():
     except socket.timeout:
         print "No data available"
         continue
+    if data=="404":
+       continue
     break
   print "received message:", data
   split_line = re.split(';',data)
