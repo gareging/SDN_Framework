@@ -140,7 +140,7 @@ class SimpleSwitch(app_manager.RyuApp):
            src_ip = arp_pkt.src_ip
            dst_ip = arp_pkt.dst_ip
            self.ip_mac_port[dpid][src_ip] = (src, in_port)
-           print self.ip_mac_port                  
+#           print self.ip_mac_port                  
 
            #save ip to mac and port correspondance
                            
@@ -363,7 +363,7 @@ class SimpleSwitch(app_manager.RyuApp):
         print "This guy is looking for ARP", src_ip
         print "Here's what he's looking for", dst_ip
         for dp, values in self.ip_mac_port.items():
-          print values
+#          print values
           if dst_ip in values:
             mac_found = values[dst_ip][0]
             out_port = in_port
@@ -401,9 +401,10 @@ class SimpleSwitch(app_manager.RyuApp):
         dpid = dp.id
         serverID = msg.cookie
         self.logger.info("Client released serverID = %d", msg.cookie)
-        if self.server_load[serverID] > 0:
-	   self.server_load[serverID] -= 1
-           print self.server_load
+        if serverID in self.server_load:
+          if self.server_load[serverID] > 0:
+	    self.server_load[serverID] -= 1
+            print self.server_load
    
     def remove_table_flows(self, datapath, table_id, match):
         """Create OFP flow mod message to remove flows from table."""
@@ -428,7 +429,7 @@ class SimpleSwitch(app_manager.RyuApp):
         GE_index = 0 #self.configuration[conf_src].keys().index('GE') #GE position read from the configuration
         DL_index = 1 #self.configuration[conf_src].keys().index('DL')
 
-        print "GE index", GE_index
+        #print "GE index", GE_index
         Maxdelay=30  
         MaxGreen=1000
         Valuedelay = 0
@@ -452,8 +453,9 @@ class SimpleSwitch(app_manager.RyuApp):
             serverID = self.servers_on_switch[s][i]  
             V[s][i]=(self.server_info[serverID][GE_index])*(W1)*((1.0/MaxGreen)*100)+ Valuedelay  # remember to calculate the proper N1 and N2 and devide by T
             Metrics[s][i]=V[s][i]/self.T[s][i]
-          print "SEE METRICS"
-          print Metrics
+        
+        print "SEE METRICS"
+        print Metrics
 
         maxvalue=0
     	Maxserver=0
