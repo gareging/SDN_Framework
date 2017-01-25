@@ -28,6 +28,7 @@ def main():
   worksheet = workbook.sheet_by_index(0)
   date = int(sys.argv[2]) + 2
   location_id = int(sys.argv[1])
+  print "Location ID is", location_id
   date_counter = 1
   row = 1
 
