@@ -386,8 +386,8 @@ class SimpleSwitch(app_manager.RyuApp):
     	Max={}
         W1 = int(self.configuration["DEFAULT"][0][0][1]) #hardcoded: GE weight
         W2 = int(self.configuration["DEFAULT"][0][2][1]) #hardcoded: DL weight
-        Maxdelay=30  
-        MaxGreen=1000
+        Maxdelay=30       #maximum of the delay used for normalization of delay in V
+        MaxGreen=20000    #maximum of the green energy used for normalization of Energy value in V
         Valuedelay = 0
        # print "NUMBER OF SERVERS"
        # print self.number_of_servers
