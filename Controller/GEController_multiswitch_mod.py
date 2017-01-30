@@ -76,8 +76,9 @@ class SDNFramework(app_manager.RyuApp):
         self.server_load = []
 	self.switch_neighbor_info = {}
         self.dpid_to_datapath = {}
+        
         self.todayis = datetime.datetime(2001, 1, 1, 00, 00)
-
+        self.server_to_switch = []
         self.counter = 0
 
         self.T = {}
@@ -287,6 +288,10 @@ class SDNFramework(app_manager.RyuApp):
             self.logger.info("Server: dpid:%d, serverID:%d, serverIP: %s", dpid, serverID, ipv4_pkt.src)
             self.number_of_servers[dpid] += 1
             self.server_ip.append(ipv4_pkt.src)
+            
+            #for test run
+            self.server_to_switch.append(dpid)
+            
             self.server_info.append([])
             for parameter in self.configuration[conf_src]:
               if parameter!='t':
@@ -317,7 +322,7 @@ class SDNFramework(app_manager.RyuApp):
           recieved_data = re.split(';', message)
 	  serverID = int(recieved_data[1])
           if (serverID not in self.servers_on_switch[dpid]):
-            #print "Server not registered"
+            print "Server not registered"
             self.send_udp_reply(dpid, datapath, eth.src, CONTROLLER_MAC, 
                            ipv4_pkt.src, CONTROLLER_IP, udp_segment.src_port, udp_segment.dst_port, in_port, "404")
 
@@ -331,13 +336,20 @@ class SDNFramework(app_manager.RyuApp):
     
             if (self.counter % 9 == 0):
               sys.stdout.write("CURRENT ENERGY VALUES:\t" + str(self.todayis) + "\t") 
-              for i in range (0, self.maxID):
+              for i in range (0, self.maxID + 1):
                  sys.stdout.write(str(self.server_info[i][0]) + "\t")
-              #print "Value received"
-              self.send_udp_reply(dpid, datapath, eth.src, CONTROLLER_MAC, 
-                           self.server_ip[i], CONTROLLER_IP, udp_segment.src_port, udp_segment.dst_port, in_port, "OK")
+              #print "Value received: SYNCHRONIZED RESPONSE TO EVERY SERVER"
+              for i in range (0, self.maxID + 1):
+                 serverIP = self.server_ip[i]
+                 serverDPID = self.server_to_switch[i]
+                 serverPORT = self.ip_mac_port[serverDPID][serverIP][1]
+                 serverMAC = self.ip_mac_port[serverDPID][serverIP][0]
+                 serverDATAPATH = self.dpid_to_datapath[serverDPID]
+                 self.send_udp_reply(serverDPID, serverDATAPATH, serverMAC, CONTROLLER_MAC, 
+                             serverIP, CONTROLLER_IP, udp_segment.src_port, udp_segment.dst_port, serverPORT, "OK")
 
               print " "
+              self.todayis += datetime.timedelta(hours=1)
 
         #switch discover UDP segment. 7779 - recieved packet; 7780 - response so the flooder-switch will register the
         #port too
