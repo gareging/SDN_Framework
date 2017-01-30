@@ -23,6 +23,7 @@ import re
 import sqlite3
 import os
 import sys
+import datetime
 from ryu.base import app_manager
 from ryu.controller import mac_to_port
 from ryu.controller import ofp_event
@@ -57,13 +58,13 @@ CONTROLLER_IP = "10.10.10.10"
 CONTROLLER_MAC = "00:00:00:00:00:01"
 
 
-class SimpleSwitch(app_manager.RyuApp):
+class SDNFramework(app_manager.RyuApp):
     global printComments
 
     OFP_VERSIONS = [ofproto_v1_0.OFP_VERSION]
 
     def __init__(self, *args, **kwargs):
-        super(SimpleSwitch, self).__init__(*args, **kwargs)
+        super(SDNFramework, self).__init__(*args, **kwargs)
         self.ip_mac_port = {}  #collection of all interfaces connected to OVS
 	printComments = 1
         self.maxID = -1
@@ -75,6 +76,10 @@ class SimpleSwitch(app_manager.RyuApp):
         self.server_load = []
 	self.switch_neighbor_info = {}
         self.dpid_to_datapath = {}
+        self.todayis = datetime.datetime(2001, 1, 1, 00, 00)
+
+        self.counter = 0
+
         self.T = {}
 	#read the configuration file
 	__location__ = os.path.realpath(os.path.join(os.getcwd(), os.path.dirname(__file__))) 
@@ -115,7 +120,7 @@ class SimpleSwitch(app_manager.RyuApp):
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
     def _packet_in_handler(self, ev):      
-        print "Packet in"
+        #print "Packet in"
         #parse the message from the event
         msg = ev.msg
 	in_port = msg.in_port 
@@ -156,7 +161,7 @@ class SimpleSwitch(app_manager.RyuApp):
            
 
     def ip_packet_handler (self, dpid, datapath, eth, msg, pkt, in_port, ipv4_pkt):
-	print "Got IP packet for dpid", dpid
+	#print "Got IP packet for dpid", dpid
         udp_segment = pkt.get_protocol(udp.udp)
         tcp_segment = pkt.get_protocol(tcp.tcp)
         parser = datapath.ofproto_parser
@@ -165,6 +170,7 @@ class SimpleSwitch(app_manager.RyuApp):
            #This packet is for controller
            self.server_controller_communication(dpid, datapath, eth, msg, in_port, ipv4_pkt, udp_segment)
         elif tcp_segment:
+           print "CLIENT FROM ", dpid
 	   dl_type_ipv4 = 0x0800
            timeout = 60
 
@@ -176,19 +182,19 @@ class SimpleSwitch(app_manager.RyuApp):
 
            #start calling SCHEDULER
            newDPID, serverID = self.PropFair(dpid, conf_src)
-           print "newDPID", newDPID
-           print "serverID", serverID
+           #print "newDPID", newDPID
+           #print "serverID", serverID
            #end calling SCHEDULER
 
            serverIP = self.server_ip[serverID]
            serverIP_int = ipv4_to_int(serverIP)
            serverPORT = self.ip_mac_port[newDPID][serverIP][1]
            serverMAC = self.ip_mac_port[newDPID][serverIP][0]
-           print "serverIP", serverIP
-           print "serverPORT", serverPORT
-           print "serverMAC", serverMAC
+           #print "serverIP", serverIP
+           #print "serverPORT", serverPORT
+           #print "serverMAC", serverMAC
 
-           #print self.serverLoad
+           #print self.server_load
 
            clientIP_int = ipv4_to_int(ipv4_pkt.src)
            clientPORT = in_port
@@ -233,7 +239,7 @@ class SimpleSwitch(app_manager.RyuApp):
                  
            if dpid==newDPID:
            #sending this packet
-             print "Sending the packet out"
+             #print "Sending the packet out"
              actions = []
        	     actions.append( createOFAction(datapath, ofproto.OFPAT_OUTPUT, serverPORT) )
              sendPacketOut(msg=msg, actions=actions, buffer_id=msg.buffer_id) 
@@ -245,15 +251,19 @@ class SimpleSwitch(app_manager.RyuApp):
 
            self.server_load[serverID] += 1
            print self.server_load     
-   
+           sys.stdout.write("CURRENT SERVER LOAD:\t" + str(self.todayis) + "\t") 
+           for i in range (0, self.maxID):
+              sys.stdout.write(str(self.server_load[i]) + "\t")
+           print " "
+
     def server_controller_communication(self, dpid, datapath, eth, msg, in_port, ipv4_pkt, udp_segment):
-	self.logger.info("udp %s", udp_segment)
-        print "Got UDP packet for controller"	
+	#self.logger.info("udp %s", udp_segment)
+        #print "Got UDP packet for controller"	
         #parsing udp segment
         udp_pointer = len(msg.data) - udp_segment.total_length + 8 
         message = msg.data[udp_pointer:]
         if udp_segment.dst_port == 7777 and message == "Hello":
-          print "Server initialization"
+          #print "Server initialization"
           #send UDP reply with the list of parameters and timeout
           self.ip_mac_port[dpid][ipv4_pkt.src] = (eth.src, in_port)
 	  if ipv4_pkt.src in self.configuration:
@@ -263,17 +273,18 @@ class SimpleSwitch(app_manager.RyuApp):
          
           try:   
             serverID = self.server_ip.index(ipv4_pkt.src)
-            print "serverID found", serverID
+            #print "serverID found", serverID
           except:
             serverID = -1
-            print "serverID not found"
+            #print "serverID not found"
 
 
           message = ""
           if serverID==-1:
-            print "Add new server"
+            #print "Add new server"
             serverID = self.maxID = self.maxID + 1
-            print serverID
+            #print serverID
+            self.logger.info("Server: dpid:%d, serverID:%d, serverIP: %s", dpid, serverID, ipv4_pkt.src)
             self.number_of_servers[dpid] += 1
             self.server_ip.append(ipv4_pkt.src)
             self.server_info.append([])
@@ -285,7 +296,7 @@ class SimpleSwitch(app_manager.RyuApp):
             self.servers_on_switch[dpid].append(serverID)
             self.T[dpid].append(1)
 
-            print self.server_info
+            #print self.server_info
         #    print self.T 
        
           if (message == ""):
@@ -302,11 +313,11 @@ class SimpleSwitch(app_manager.RyuApp):
          # print self.servers
 	  
         elif udp_segment.dst_port == 7778:
-          print message
+          #print message
           recieved_data = re.split(';', message)
 	  serverID = int(recieved_data[1])
           if (serverID not in self.servers_on_switch[dpid]):
-            print "Server not registered"
+            #print "Server not registered"
             self.send_udp_reply(dpid, datapath, eth.src, CONTROLLER_MAC, 
                            ipv4_pkt.src, CONTROLLER_IP, udp_segment.src_port, udp_segment.dst_port, in_port, "404")
 
@@ -316,10 +327,17 @@ class SimpleSwitch(app_manager.RyuApp):
             for value in values:
               self.server_info[serverID][i] = float(value)
               i += 1         
-            print self.server_info
-            print "Value received"
-            self.send_udp_reply(dpid, datapath, eth.src, CONTROLLER_MAC, 
-                           ipv4_pkt.src, CONTROLLER_IP, udp_segment.src_port, udp_segment.dst_port, in_port, "OK")
+            self.counter += 1
+    
+            if (self.counter % 9 == 0):
+              sys.stdout.write("CURRENT ENERGY VALUES:\t" + str(self.todayis) + "\t") 
+              for i in range (0, self.maxID):
+                 sys.stdout.write(str(self.server_info[i][0]) + "\t")
+              #print "Value received"
+              self.send_udp_reply(dpid, datapath, eth.src, CONTROLLER_MAC, 
+                           self.server_ip[i], CONTROLLER_IP, udp_segment.src_port, udp_segment.dst_port, in_port, "OK")
+
+              print " "
 
         #switch discover UDP segment. 7779 - recieved packet; 7780 - response so the flooder-switch will register the
         #port too
@@ -360,8 +378,6 @@ class SimpleSwitch(app_manager.RyuApp):
         out_port = None
         mac_found = ""
         
-        print "This guy is looking for ARP", src_ip
-        print "Here's what he's looking for", dst_ip
         for dp, values in self.ip_mac_port.items():
 #          print values
           if dst_ip in values:
@@ -373,7 +389,7 @@ class SimpleSwitch(app_manager.RyuApp):
             break
 	
         if out_port == None:
-	   print "Controller or unknown ARP request"
+	   #print "Controller or unknown ARP request"
            e = ethernet.ethernet(dst=eth.src, src=CONTROLLER_MAC, ethertype=ether.ETH_TYPE_ARP)
            a = arp.arp(hwtype=1, proto=0x0800, hlen=6, plen=4, opcode=2, src_mac=CONTROLLER_MAC, 
                 src_ip=dst_ip, dst_mac=eth.src, dst_ip=src_ip) 
@@ -400,11 +416,11 @@ class SimpleSwitch(app_manager.RyuApp):
         dp = msg.datapath
         dpid = dp.id
         serverID = msg.cookie
-        self.logger.info("Client released serverID = %d", msg.cookie)
+        #self.logger.info("Client released serverID = %d", msg.cookie)
         if serverID in self.server_load:
           if self.server_load[serverID] > 0:
 	    self.server_load[serverID] -= 1
-            print self.server_load
+            #print self.server_load
    
     def remove_table_flows(self, datapath, table_id, match):
         """Create OFP flow mod message to remove flows from table."""
@@ -454,8 +470,8 @@ class SimpleSwitch(app_manager.RyuApp):
             V[s][i]=(self.server_info[serverID][GE_index])*(W1)*((1.0/MaxGreen)*100)+ Valuedelay  # remember to calculate the proper N1 and N2 and devide by T
             Metrics[s][i]=V[s][i]/self.T[s][i]
         
-        print "SEE METRICS"
-        print Metrics
+        #print "SEE METRICS"
+        #print Metrics
 
         maxvalue=0
     	Maxserver=0
@@ -476,8 +492,8 @@ class SimpleSwitch(app_manager.RyuApp):
             else:
               self.T[s][i]=(1.0-(1.0/tc))*self.T[s][i]
 
-        print "Scheduler chooses", Maxserver 
-        print "Switch", Maxsid
+        #print "Scheduler chooses", Maxserver 
+        #print "Switch", Maxsid
         MaxserverID = self.servers_on_switch[Maxsid][Maxserver]         
 	return Maxsid,MaxserverID
 
