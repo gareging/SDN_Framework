@@ -94,7 +94,7 @@ def main():
         print "Send it again"
         continue
     if data == "404":
-        break
+        return
     
     print "OK received"
     row += 2 #jumping
