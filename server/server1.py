@@ -96,6 +96,7 @@ def main():
     if data == "404":
         break
     
+    print "OK received"
     row += 2 #jumping
     time.sleep(int(timeout))    
 
