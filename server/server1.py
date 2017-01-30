@@ -71,7 +71,7 @@ def main():
   print "Timeout", timeout
   print "Parameters", parameters
   
-  sock.settimeout(10)
+  sock.settimeout(100)
   v = 0.0
   metrics = 0
   while True:
