@@ -170,8 +170,8 @@ class SDNFramework(app_manager.RyuApp):
         if udp_segment and ipv4_pkt.dst == CONTROLLER_IP:
            #This packet is for controller
            self.server_controller_communication(dpid, datapath, eth, msg, in_port, ipv4_pkt, udp_segment)
-        elif tcp_segment:
-           print "CLIENT FROM ", dpid
+        elif tcp_segment and (len(self.server_info) > 0):
+           #print "CLIENT FROM ", dpid
 	   dl_type_ipv4 = 0x0800
            timeout = 60
 
@@ -233,7 +233,7 @@ class SDNFramework(app_manager.RyuApp):
            self.add_flow(datapath=datapath, match=match, act=actions, priority=1, idle_timeout=timeout)
 
            if dpid != newDPID:
-               print "Install the reverse flow into transition switch"
+              # print "Install the reverse flow into transition switch"
                actions = [ parser.OFPActionOutput(self.switch_neighbor_info[newDPID][dpid])]
                self.add_flow(datapath=self.dpid_to_datapath[newDPID], match=match, 
                                   act=actions, priority=1, idle_timeout=timeout)
@@ -251,11 +251,12 @@ class SDNFramework(app_manager.RyuApp):
              sendPacketOut(msg=msg, actions=actions, buffer_id=msg.buffer_id) 
 
            self.server_load[serverID] += 1
-           print self.server_load     
-           sys.stdout.write("CURRENT SERVER LOAD:\t" + str(self.todayis) + "\t") 
-           for i in range (0, self.maxID):
-              sys.stdout.write(str(self.server_load[i]) + "\t")
-           print " "
+           #print self.server_load     
+           #if (self.counter % 9 == 0):
+           #  sys.stdout.write("L:\t" + str(self.todayis) + "\t") 
+           #  for i in range (0, self.maxID + 1):
+           #     sys.stdout.write(str(self.server_load[i]) + "\t")
+           #  print " "
 
     def server_controller_communication(self, dpid, datapath, eth, msg, in_port, ipv4_pkt, udp_segment):
 	#self.logger.info("udp %s", udp_segment)
@@ -335,9 +336,14 @@ class SDNFramework(app_manager.RyuApp):
             self.counter += 1
     
             if (self.counter % 9 == 0):
-              sys.stdout.write("CURRENT ENERGY VALUES:\t" + str(self.todayis) + "\t") 
+              sys.stdout.write("E:\t" + str(self.todayis) + "\t") 
               for i in range (0, self.maxID + 1):
                  sys.stdout.write(str(self.server_info[i][0]) + "\t")
+              sys.stdout.write("\n")
+              sys.stdout.write("L:\t" + str(self.todayis) + "\t") 
+              for i in range (0, self.maxID + 1):
+                 sys.stdout.write(str(self.server_load[i]) + "\t")
+
               #print "Value received: SYNCHRONIZED RESPONSE TO EVERY SERVER"
               for i in range (0, self.maxID + 1):
                  serverIP = self.server_ip[i]
