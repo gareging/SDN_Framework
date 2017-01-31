@@ -97,7 +97,7 @@ def main():
         return
     
     print "OK received"
-    row += 2 #jumping
+    row += 1 #jumping
     time.sleep(int(timeout))    
 
 if __name__ == "__main__":
