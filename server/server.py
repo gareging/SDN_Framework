@@ -1,6 +1,6 @@
 import socket, sys, commands, re
 import random, time, math
-import xlrd
+import xlrd, datetime
 
 #controller default PORT and IP
 UDP_IP = 'controller-host'
@@ -8,7 +8,10 @@ UDP_PORT_HELLO = 7777
 UDP_PORT_INFO = 7778
 UDP_OUT_PORT=5005
 
-
+def datetime_to_excel(date):
+    temp = datetime.datetime(1899, 12, 30)
+    delta = date - temp
+    return (delta.days + delta.seconds / 86400)
 
 def getGreenEnergyValue(location_id, worksheet, row):
   energyValue = worksheet.cell(row,location_id).value
@@ -22,11 +25,11 @@ def getCPUValue():
 
 
 def main():
-  
   print "Excel parsing"
   workbook = xlrd.open_workbook('Solar_Test.xlsx')
   worksheet = workbook.sheet_by_index(0)
-  date = int(sys.argv[2]) + 2
+  input_date = datetime.datetime.strptime(sys.argv[2] + "-00-00", "%Y-%m-%d-%H-%M")
+  date = datetime_to_excel(input_date)
   location_id = int(sys.argv[1])
   print "Location ID is", location_id
   date_counter = 1
