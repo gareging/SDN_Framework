@@ -58,7 +58,7 @@ def main():
     try:
       data, addr = sock.recvfrom(1024) # buffer size is 1024 bytes
     except socket.timeout:
-        print "No data available"
+        print "No response from controller"
         continue
     if data=="404":
        continue
