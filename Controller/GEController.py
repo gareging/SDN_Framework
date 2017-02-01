@@ -77,16 +77,19 @@ class SDNFramework(app_manager.RyuApp):
 	self.switch_neighbor_info = {}
         self.dpid_to_datapath = {}
         self.total_load = 0        
-        self.todayis = datetime.datetime(2001, 1, 1, 00, 00)
         self.server_to_switch = []
         self.counter = 0
 
+        start_date = ""
         self.T = {}
 	#read the configuration file
 	__location__ = os.path.realpath(os.path.join(os.getcwd(), os.path.dirname(__file__))) 
 	with open(os.path.join(__location__, 'config')) as f:
            for line in f:
              if line.startswith( '#' ):
+	       continue
+             elif line.startswith( '*' ):
+               start_date = line[1:-1]
 	       continue
 	     split_line = re.split(';',line[:-1])
              server = split_line[0]
@@ -106,12 +109,16 @@ class SDNFramework(app_manager.RyuApp):
 	     timeout = split_line[2]
              self.configuration[server]["t"] = timeout
 	print self.configuration
-
+         
         if "DEFAULT" not in self.configuration:
            print "WRONG CONFIGURATION"
 	   exit()
 
         print "Configuration validated"
+        
+        self.todayis = datetime.datetime.strptime(start_date + "-00-00", "%Y-%m-%d-%H-%M")
+        #self.todayis = datetime.datetime(2001, 1, 1, 00, 00)
+
     
     def add_flow(self, datapath, match, act, priority=0, idle_timeout=0, flags=0, cookie=0):
         ofproto = datapath.ofproto
