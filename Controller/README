@@ -1,0 +1,172 @@
+= SDN Framework (Green Computing)
+
+SDN Framework module is an extension of RYU controller that provides the generic functionality for collecting data 
+from servers on the network, making routing decisions and installing SDN flows into OVS switch. In this 
+application of SDN Framework, the SDN controller schedules client TCP requests to data servers based on their 
+Green Energy capacities. The servers send the green energy values by UDP "info-packets". 
+
+= Architecture
+
+The SDN Framework consists of a module for RYU controller and a server module. The topology on which SDN Framework
+works consists of SDN controller, OVS switches connected to SDN controller, client and server hosts connected
+to OVS switches. The OVS switches might be connected with each other.
+
+= Installation on GENI
+
+Reserve resources using Rspec FRAMEWORK.xml.
+FRAMEWORK.xml generates the topology with one SDN controller, three OVS switches, three server and two client hosts per each
+switch. OVS switches are connected to each other. Each host is assigned with a private IP address from subnet 10.0.0.0/8.
+
+Using Rspec GENI runs different scripts on each of the reserved machines:
+a) On servers, scripts: 
+	* modify the routing table in order to guarantee that any packet to IP address from subnet 
+	10.0.0.0/24 will be sent through interface eth1 (connected to OVS switch)
+	* add an alias "controller-host" for IP address 10.10.10.10
+	* download from git repository the xlsx file with green energy data (/tmp/server)
+        * download python script server.py for server-controller communication (/tmp/server)
+	* installs Apache2 Web Server (/var/www/)
+
+b) On OVS switches, scripts:
+	* configure OVS bridge
+	* add interfaces to the OVS bridge except the one connected to the controller
+
+c) On SDN controller, scripts:
+	* install RYU controller (/tmp/ryu/)
+	* install SDN Framework module including the configuration file (/tmp/ryu/Controller)
+
+
+= Prepare for the experiment
+1. To run the server scripts simultaneously the script start_server.sh can be used.
+Before running the script, it must be edited for successful remote ssh. Use the template to update it.
+Then run the script.
+
+2. ssh to the controller host.
+In the configuration file (/tmp/config) we specify 
+	a) the parameters that SDN controller will request from servers 
+	b) the weights for these parameters (used in the scheduling algorithm)
+	b) the frequency of the UDP "info messages" coming from servers.
+	c) the start date of the emulation (in the current implementation it is merely for the output,
+       		does not effect the scheduling algorithm or data received from servers at all).
+
+To run SDN Framework (Green Energy), run these commands:
+cd /tmp/ryu; ./bin/ryu-manager Controller/GEController.py
+
+If successful, you will see that servers register at the SDN controller. 
+Example of the output:
+
+loading app Controller/GEController.py
+loading app ryu.controller.dpset
+loading app ryu.controller.ofp_handler
+instantiating app Controller/GEController.py of SDNFramework
+instantiating app ryu.controller.dpset of DPSet
+instantiating app ryu.controller.ofp_handler of OFPHandler
+Server: dpid:200965445886537, serverID:0, serverIP: 10.10.1.1
+Server: dpid:200965445886537, serverID:1, serverIP: 10.10.3.1
+Server: dpid:200965445886537, serverID:2, serverIP: 10.10.2.1
+Server: dpid:55309789427013, serverID:3, serverIP: 10.10.10.1
+Server: dpid:55309789427013, serverID:4, serverIP: 10.10.9.2
+Server: dpid:55309789427013, serverID:5, serverIP: 10.10.8.1
+Server: dpid:82177703257927, serverID:6, serverIP: 10.10.13.1
+Server: dpid:82177703257927, serverID:7, serverIP: 10.10.20.1
+Server: dpid:82177703257927, serverID:8, serverIP: 10.10.14.1
+
+3. ssh to client hosts and make a TCP request to one of the servers (for example, server-1).
+You can run the command wget http://server-1/.
+
+On the controller host, you should see that TCP request was scheduled to one of the servers. You should see its green energy values,
+the simulation date and a current number of users on each server. 
+
+Example: 
+L:      2001-01-01 05:00:00     325     325     325     299     294     294     260     255     242      
+E:      2001-01-01 06:00:00     0.0     0.0     0.0     0.0     0.0     0.0     6333.75124781   7077.17304762   4507.96520407   
+
+= Code structure
+
+1. server.py. Sends the info packets to the controller with data taken from Excel file (Solar Energy values).
+
+	Arguments: (a) The location ID  1 - ELMIRA
+					2 - WATERTOWN
+					3 - WESTHAMPTON
+					4 - HOMESTEAD
+					5 - ORLANDO
+					6 - TYNDALL
+					7 - LOMPOC
+					8 - MARCH
+					9 - TRAVIS
+              
+                   (b) The start date in format: YYYY-mm-dd. Currently, only 2001 year's data is available.
+
+
+server.py sends the initial "Hello" message (UDP packet) to SDN controller in order to register the server at the 
+controller and get its serverID, the list of required parameters, plus how often they must be sent. If timeout reached, 
+server resends the packet. 
+
+If the message from controller received, a server sends the info packet starting from the day passed in the argument (b).
+In order to synchronize "info packets”, each server does not send the next info packet until it receives "OK" packet from the 
+controller. If by some reason controller was restarted, the registration of the server will be lost, so a server will have to
+re-register by sending another "Hello" message. If a server was restarted and re-sends "hello" message, the controller will match 
+its IP address to registered IP addresses and will return back the existing serverID for that server.
+
+                              serverID +
+   	 ____________________ required parameters  _____________________
+   	|                    | and sending rate   |                     |
+------->| Send hello message |------------------->| Send info packets   |
+  .---->|____________________|               .--> |_____________________|
+  |                        |                 |                      | |
+  |            Timeout     |           	     |                      | |
+  |<-----------------------v                 <----------------------v |
+  |                                   Received "OK" from controller   | 
+  |			               => send next day info	      | 
+  |	Received error message					      |
+  <-------------------------------------------------------------------v
+
+
+2. GEController.py: handles arp requests, collects data from servers, makes scheduling decisions and install flows in OVS switches.
+At the initialization stage, reads the configuration file.
+
+def _event_switch_enter_handler(self, ev) - on switch connection event:
+	a) Initializes data structures for the switch
+	b) Installs miss-flows
+        c) Sends a switch-discover broadcast message in order to establish switch neighbourship 
+	   and the ports used for switch-to-switch connection 
+
+def add_flow(self, datapath, match, act, priority=0, idle_timeout=0, flags=0, cookie=0) - flow installing routine.
+
+def _packet_in_handler(self, ev) - on packet in connection event: parses the packet, recognizes the protocol 
+				   and calls the corresponding functions
+
+def ip_packet_handler (self, dpid, datapath, eth, msg, pkt, in_port, ipv4_pkt) - IP packet handling:
+analyzes upper-level protocol. UDP is allowed only for controller management and the corresponding
+function is called. For TCP requests controller call function PropFair(dpid, configuration) which makes
+scheduling decisions on what server will serve the TCP request.
+
+Before the packet is sent out to the corresponding port on the OVS switch, SDN controller install
+flows for both direction (client-server and server-client). These flows are used to rewrite headers
+of the matched packets and ouput them to the ports chosen by SDN controller. They are removed from 
+the flow table in case of reaching idle timeout.
+
+For the simulation purpose, SDN controller installs flows for the pair (Client IP address, Client TCP port).
+By that, we can simulate multiple parallel TCP requests from the same machine.
+
+3. def server_controller_communication(self, dpid, datapath, eth, msg, in_port, ipv4_pkt, udp_segment) -
+handles server-controller and controller-OVS switch communication.
+
+All server UDP packets match the miss-flow so they directed to the controller. 
+Similarly, switch discover packets reach the controller so it can get the topology of the network.
+
+4. def send_udp_reply(...), def send_arp_reply(...) - routines for sending and generatingUDP and
+						      ARP messages from the controller.
+
+5. def flow_removal_handler(self, ev) - handles flow removal flag.
+
+6. def remove_table_flows(self, datapath, table_id, match) - route to remove all flows from the 
+							     flow table.
+
+7. def PropFair(self, dpid, conf_src) - the scheduler routine. Takes as input the configuration
+				   for the request and the switch from which comes that request. 
+
+PropFair(..) is making decisions based on the following factors:
+	(a) Green energy values.
+	(b) Delays in case of rerouting the packet to a server connected to 
+            the neighboring switch.
+ 	(c) Weight for each of these parameters.
