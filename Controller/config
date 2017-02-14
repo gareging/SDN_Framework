@@ -2,8 +2,5 @@
 <<<<<<< HEAD
 *2001-01-01
 DEFAULT;GE*80,DL*20;1
-=======
-DEFAULT;GE*70,DL*20;1
->>>>>>> 3f2407e18be6ee42baeab0d3ce9ffd1cbb8c0ec9
 #10.5.5.1;GE,DL,NX,SS,RR,TT;100
 #10.10.1.4;GE*30,CPU*70;60
