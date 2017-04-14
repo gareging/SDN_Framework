@@ -283,7 +283,7 @@ class SDNFramework(app_manager.RyuApp):
         #parsing udp segment
         udp_pointer = len(msg.data) - udp_segment.total_length + 8 
         message = msg.data[udp_pointer:]
-	#message = str(pkt.protocols[3])
+	#message = str(pkt.protocols[3])  #IMPORTANT! THIS WILL HELP WITH DATA PARSING PROBLEMS
         if udp_segment.dst_port == 7777 and message == "Hello":
           #print "Server initialization"
           #send UDP reply with the list of parameters and timeout
