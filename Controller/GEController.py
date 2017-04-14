@@ -178,7 +178,7 @@ class SDNFramework(app_manager.RyuApp):
 	ofproto = datapath.ofproto
         if udp_segment and ipv4_pkt.dst == CONTROLLER_IP:
            #This packet is for controller
-           self.server_controller_communication(dpid, datapath, eth, msg, in_port, ipv4_pkt, udp_segment)
+           self.server_controller_communication(dpid, datapath, eth, msg, in_port, ipv4_pkt, udp_segment, pkt)
         elif tcp_segment and (len(self.server_info) > 0):
            #print "CLIENT FROM ", dpid
 	   dl_type_ipv4 = 0x0800
@@ -277,12 +277,13 @@ class SDNFramework(app_manager.RyuApp):
            ##END VERIFICATION
 
 
-    def server_controller_communication(self, dpid, datapath, eth, msg, in_port, ipv4_pkt, udp_segment):
+    def server_controller_communication(self, dpid, datapath, eth, msg, in_port, ipv4_pkt, udp_segment, pkt):
 	#self.logger.info("udp %s", udp_segment)
         #print "Got UDP packet for controller"	
         #parsing udp segment
         udp_pointer = len(msg.data) - udp_segment.total_length + 8 
         message = msg.data[udp_pointer:]
+	#message = str(pkt.protocols[3])
         if udp_segment.dst_port == 7777 and message == "Hello":
           #print "Server initialization"
           #send UDP reply with the list of parameters and timeout
